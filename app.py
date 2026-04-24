@@ -11,6 +11,7 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 WEIGHTS_NAME = 'model_weights.weights.h5'
 WEIGHTS_PATH = os.path.join(CURRENT_DIR, WEIGHTS_NAME)
 
+# Full Genus Mapping
 CORAL_MAP = {
     'ACP': {'name': 'Acropora', 'color': (255, 0, 0, 100), 'desc': 'Branching/Table Coral (Red)'},
     'DIPLO': {'name': 'Diploastrea', 'color': (0, 255, 0, 100), 'desc': 'Massive Coral (Green)'},
@@ -54,8 +55,8 @@ st.markdown("""
     <style>
     .main { background-color: #fcfcfc; }
     .stButton>button { width: 100%; border-radius: 8px; height: 3.5em; background-color: #1E3A8A; color: white; font-weight: bold; }
-    .sidebar .sidebar-content { background-color: #f0f2f6; }
     h1 { color: #1E3A8A; }
+    .stAlert { border-radius: 10px; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -66,13 +67,9 @@ st.divider()
 # Sidebar for Settings and Legend
 with st.sidebar:
     st.header("⚙️ Analysis Settings")
-    # Fitur Utama: Confidence Score Filter
     conf_threshold = st.slider(
         "Confidence Threshold", 
-        min_value=0.0, 
-        max_value=1.0, 
-        value=0.7, 
-        step=0.05,
+        0.0, 1.0, 0.7, 0.05,
         help="Higher threshold means stricter classification. Only high-confidence predictions will be labeled."
     )
     
@@ -83,12 +80,20 @@ with st.sidebar:
         st.caption(info['desc'])
     
     st.divider()
-    st.info("System identifies coral genus across a 10x5 grid (50 samples per image).")
+    st.header("📝 Research Notes")
+    st.warning("""
+        **Data Quality Assurance:**
+        Classification accuracy is highly dependent on image resolution. 
+        
+        Since the system crops the image into 50 patches, **low-pixel density** images will cause 'pixelation' in the patches, leading to misclassification. 
+        
+        *Recommended: 1920x1080px minimum.*
+    """)
 
 model = load_coral_model()
 
 if model is None:
-    st.error(f"Critical Error: Weights file '{WEIGHTS_NAME}' missing in repository.")
+    st.error(f"Critical Error: Weights file '{WEIGHTS_NAME}' missing.")
 else:
     col1, col2 = st.columns([1, 1])
 
@@ -101,7 +106,7 @@ else:
     if uploaded_file is not None:
         with col2:
             if st.button("Run Quantitative Analysis"):
-                with st.spinner('AI is analyzing coral patches...'):
+                with st.spinner('Neural Network is processing patches...'):
                     img_array = np.array(image)
                     h, w, _ = img_array.shape
                     rows, cols = 5, 10
@@ -113,7 +118,6 @@ else:
                     counts = {cls: 0 for cls in CLASSES}
                     counts['Uncertain/Others'] = 0
 
-                    # Analysis Loop
                     for r in range(rows):
                         for c in range(cols):
                             y1, y2 = r * cell_h, (r + 1) * cell_h
@@ -124,15 +128,12 @@ else:
                             idx = np.argmax(preds)
                             conf = np.max(preds)
                             
-                            # Apply Confidence Filter
                             if conf >= conf_threshold:
                                 label_code = CLASSES[idx]
                                 genus_name = CORAL_MAP[label_code]['name']
                                 counts[label_code] += 1
-                                
-                                # Visualization
                                 draw.rectangle([x1, y1, x2, y2], fill=CORAL_MAP[label_code]['color'], outline=(255,255,255,180), width=2)
-                                draw.text((x1 + 5, y1 + 5), f"{genus_name}", fill=(255,255,255,255))
+                                draw.text((x1 + 5, y1 + 5), genus_name, fill=(255,255,255,255))
                             else:
                                 counts['Uncertain/Others'] += 1
                                 draw.rectangle([x1, y1, x2, y2], outline=(200, 200, 200, 80), width=1)
@@ -140,7 +141,6 @@ else:
                     result_img = Image.alpha_composite(image.convert('RGBA'), overlay).convert('RGB')
                     st.image(result_img, caption=f"Analysis Result (Threshold: {conf_threshold})", use_container_width=True)
 
-        # Statistical Summary
         if 'result_img' in locals():
             st.divider()
             res_col1, res_col2 = st.columns([1, 1])
