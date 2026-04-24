@@ -1,12 +1,9 @@
-import os
-# Paksa guna Keras lama sebelum import apa-apa
-os.environ['TF_USE_LEGACY_KERAS'] = '1'
-
 import streamlit as st
 import tensorflow as tf
 import numpy as np
 from PIL import Image, ImageDraw
 import cv2
+import os
 import pandas as pd
 
 # --- 1. SETTING PATH ---
@@ -16,42 +13,44 @@ MODEL_PATH = os.path.join(CURRENT_DIR, MODEL_NAME)
 
 CLASSES = ['ACP', 'DIPLO', 'FUN', 'MON', 'PORI']
 
-# Warna RGBA
+# Warna RGBA untuk Grid
 COLORS_RGBA = {
     'ACP': (255, 0, 0, 100), 'DIPLO': (0, 255, 0, 100), 
     'FUN': (0, 0, 255, 100), 'MON': (255, 255, 0, 100), 
     'PORI': (255, 0, 255, 100)
 }
 
-# --- 2. LOAD MODEL ---
+# --- 2. LOAD MODEL (CARA PALING SELAMAT) ---
 @st.cache_resource
 def load_coral_model():
     if not os.path.exists(MODEL_PATH):
-        st.error(f"Fail {MODEL_NAME} tidak dijumpai!")
+        st.error(f"Fail {MODEL_NAME} tidak dijumpai di server GitHub!")
         return None
     try:
-        # Gunakan tf.keras secara terus, jangan guna 'import keras'
+        # Gunakan tf.keras.models secara terus tanpa import keras berasingan
+        # compile=False sangat penting untuk bypass ralat versi optimizers
         model = tf.keras.models.load_model(MODEL_PATH, compile=False)
         return model
     except Exception as e:
-        st.error(f"Ralat: {e}")
+        st.error(f"Ralat semasa memuatkan model: {e}")
+        st.info("Cuba klik 'Settings' > 'Delete Cache' dan 'Reboot' di dashboard Streamlit.")
         return None
 
-# --- 3. UI ---
-st.set_page_config(page_title="Coral AI Analysis", layout="centered")
-st.title("🪸 Automated Coral Classification")
+# --- 3. UI WEB ---
+st.set_page_config(page_title="Coral Analysis AI", layout="centered")
+st.title("🪸 Automated Coral Species Classification")
 
 model = load_coral_model()
 
 if model is not None:
-    uploaded_file = st.file_uploader("Upload Coral Image", type=["jpg", "jpeg", "png"])
+    uploaded_file = st.file_uploader("Muat naik imej karang (JPG/PNG)", type=["jpg", "jpeg", "png"])
 
     if uploaded_file is not None:
         image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, caption="Input Image", use_container_width=True)
+        st.image(image, caption="Imej Input", use_container_width=True)
 
-        if st.button("Run Analysis"):
-            with st.spinner('Analysing...'):
+        if st.button("Jalankan Analisis Grid"):
+            with st.spinner('Sedang menganalisis 50 patches...'):
                 img_array = np.array(image)
                 h, w, _ = img_array.shape
                 rows, cols = 5, 10
@@ -72,6 +71,7 @@ if model is not None:
                         cell_norm = cell_resized / 255.0
                         cell_batch = np.expand_dims(cell_norm, axis=0)
 
+                        # Predict menggunakan model yang di-load
                         preds = model.predict(cell_batch, verbose=0)
                         idx = np.argmax(preds)
                         conf = np.max(preds)
@@ -80,12 +80,22 @@ if model is not None:
                             label = CLASSES[idx]
                             counts[label] += 1
                             draw.rectangle([x1, y1, x2, y2], fill=COLORS_RGBA[label])
+                            draw.rectangle([x1, y1, x2, y2], outline=(255,255,255,150), width=2)
                         else:
                             counts['Others'] += 1
-                            draw.rectangle([x1, y1, x2, y2], outline=(200,200,200,50))
+                            draw.rectangle([x1, y1, x2, y2], outline=(200,200,200,50), width=1)
 
-                st.image(Image.alpha_composite(image.convert('RGBA'), overlay).convert('RGB'), use_container_width=True)
+                # Papar hasil gabungan
+                final_img = Image.alpha_composite(image.convert('RGBA'), overlay).convert('RGB')
+                st.subheader("Hasil Analisis Grid (10x5)")
+                st.image(final_img, use_container_width=True)
                 
-                # Table stats
-                df_stats = [{"Species": k, "Count": v, "Coverage": f"{(v/50)*100:.1f}%"} for k,v in counts.items()]
+                # Papar jadual statistik
+                st.divider()
+                st.subheader("📊 Statistik Liputan Karang")
+                df_stats = []
+                for sp, count in counts.items():
+                    pct = (count / 50) * 100
+                    df_stats.append({"Spesies": sp, "Bilangan Grid": count, "Peratusan (%)": f"{pct:.1f}%"})
+                
                 st.table(pd.DataFrame(df_stats))
