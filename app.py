@@ -11,7 +11,6 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 WEIGHTS_NAME = 'model_weights.weights.h5'
 WEIGHTS_PATH = os.path.join(CURRENT_DIR, WEIGHTS_NAME)
 
-# Professional Mapping
 CORAL_MAP = {
     'ACP': {'name': 'Acropora', 'color': (255, 0, 0, 100), 'desc': 'Branching/Table Coral (Red)'},
     'DIPLO': {'name': 'Diploastrea', 'color': (0, 255, 0, 100), 'desc': 'Massive Coral (Green)'},
@@ -50,32 +49,46 @@ def load_coral_model():
 # --- 3. PROFESSIONAL UI ---
 st.set_page_config(page_title="CoralVision AI", page_icon="🪸", layout="wide")
 
-# Custom CSS for a professional look
+# Custom CSS for Professional Theme
 st.markdown("""
     <style>
-    .main { background-color: #f8f9fa; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
-    .reportview-container .main .block-container { padding-top: 2rem; }
+    .main { background-color: #fcfcfc; }
+    .stButton>button { width: 100%; border-radius: 8px; height: 3.5em; background-color: #1E3A8A; color: white; font-weight: bold; }
+    .sidebar .sidebar-content { background-color: #f0f2f6; }
+    h1 { color: #1E3A8A; }
     </style>
     """, unsafe_allow_html=True)
 
 st.title("🪸 CoralVision AI: Automated Ecological Analysis")
-st.markdown("### Marine Science Research | Quantitative Benthic Cover Estimation")
+st.markdown("#### Marine Science Research | Quantitative Benthic Cover Estimation")
 st.divider()
 
-# Sidebar for Legend and Info
+# Sidebar for Settings and Legend
 with st.sidebar:
-    st.header("Color Legend")
+    st.header("⚙️ Analysis Settings")
+    # Fitur Utama: Confidence Score Filter
+    conf_threshold = st.slider(
+        "Confidence Threshold", 
+        min_value=0.0, 
+        max_value=1.0, 
+        value=0.7, 
+        step=0.05,
+        help="Higher threshold means stricter classification. Only high-confidence predictions will be labeled."
+    )
+    
+    st.divider()
+    st.header("🔍 Genus Legend")
     for code, info in CORAL_MAP.items():
         st.markdown(f"**{info['name']}**")
-        st.caption(f"{info['desc']}")
-        st.divider()
-    st.info("System uses a 10x5 grid (50 patches) to estimate percentage cover.")
+        st.caption(info['desc'])
+    
+    st.divider()
+    st.info("System identifies coral genus across a 10x5 grid (50 samples per image).")
 
 model = load_coral_model()
 
 if model is None:
-    st.error(f"Critical Error: Weights file '{WEIGHTS_NAME}' missing.")
+    st.error(f"Critical Error: Weights file '{WEIGHTS_NAME}' missing in repository.")
 else:
     col1, col2 = st.columns([1, 1])
 
@@ -83,12 +96,12 @@ else:
         uploaded_file = st.file_uploader("Upload Survey Image (JPG/PNG)", type=["jpg", "jpeg", "png"])
         if uploaded_file:
             image = Image.open(uploaded_file).convert("RGB")
-            st.image(image, caption="Original Input", use_container_width=True)
+            st.image(image, caption="Original Survey Image", use_container_width=True)
 
     if uploaded_file is not None:
         with col2:
-            if st.button("Generate Analysis Report"):
-                with st.spinner('Processing neural network inference...'):
+            if st.button("Run Quantitative Analysis"):
+                with st.spinner('AI is analyzing coral patches...'):
                     img_array = np.array(image)
                     h, w, _ = img_array.shape
                     rows, cols = 5, 10
@@ -96,8 +109,9 @@ else:
 
                     overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))
                     draw = ImageDraw.Draw(overlay)
+                    
                     counts = {cls: 0 for cls in CLASSES}
-                    counts['Others/Sand'] = 0
+                    counts['Uncertain/Others'] = 0
 
                     # Analysis Loop
                     for r in range(rows):
@@ -110,35 +124,38 @@ else:
                             idx = np.argmax(preds)
                             conf = np.max(preds)
                             
-                            if conf > 0.5:
+                            # Apply Confidence Filter
+                            if conf >= conf_threshold:
                                 label_code = CLASSES[idx]
-                                full_name = CORAL_MAP[label_code]['name']
+                                genus_name = CORAL_MAP[label_code]['name']
                                 counts[label_code] += 1
-                                draw.rectangle([x1, y1, x2, y2], fill=CORAL_MAP[label_code]['color'], outline=(255,255,255,150), width=2)
-                                draw.text((x1 + 5, y1 + 5), full_name, fill=(255,255,255,255))
+                                
+                                # Visualization
+                                draw.rectangle([x1, y1, x2, y2], fill=CORAL_MAP[label_code]['color'], outline=(255,255,255,180), width=2)
+                                draw.text((x1 + 5, y1 + 5), f"{genus_name}", fill=(255,255,255,255))
                             else:
-                                counts['Others/Sand'] += 1
-                                draw.rectangle([x1, y1, x2, y2], outline=(200,200,200,50), width=1)
+                                counts['Uncertain/Others'] += 1
+                                draw.rectangle([x1, y1, x2, y2], outline=(200, 200, 200, 80), width=1)
 
                     result_img = Image.alpha_composite(image.convert('RGBA'), overlay).convert('RGB')
-                    st.image(result_img, caption="Classified Grid Result", use_container_width=True)
+                    st.image(result_img, caption=f"Analysis Result (Threshold: {conf_threshold})", use_container_width=True)
 
-        # Bottom Results Section
+        # Statistical Summary
         if 'result_img' in locals():
             st.divider()
             res_col1, res_col2 = st.columns([1, 1])
             
             with res_col1:
-                st.subheader("📊 Statistical Breakdown")
+                st.subheader("📊 Quantitative Results")
                 stats_data = []
                 for sp, count in counts.items():
                     name = CORAL_MAP[sp]['name'] if sp in CORAL_MAP else sp
                     pct = (count / 50) * 100
-                    stats_data.append({"Coral Genus": name, "Grid Count": count, "Cover (%)": f"{pct:.1f}%"})
+                    stats_data.append({"Coral Genus": name, "Grid Count": count, "Benthic Cover (%)": f"{pct:.1f}%"})
                 st.table(pd.DataFrame(stats_data))
 
             with res_col2:
-                st.subheader("📈 Visual Distribution")
+                st.subheader("📈 Genus Distribution")
                 chart_df = pd.DataFrame({
                     'Genus': [CORAL_MAP[k]['name'] if k in CORAL_MAP else k for k in counts.keys()],
                     'Count': list(counts.values())
