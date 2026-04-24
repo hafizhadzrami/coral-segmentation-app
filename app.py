@@ -1,9 +1,11 @@
+import os
+# PAKSA PENGGUNAAN KERAS 2 (Mesti letak sebelum import tensorflow)
+os.environ['TF_USE_LEGACY_KERAS'] = '1'
 import streamlit as st
 import tensorflow as tf
 import numpy as np
 from PIL import Image, ImageDraw
 import cv2
-import os
 import pandas as pd
 
 # --- 1. SETTING PATH & CONFIG ---
