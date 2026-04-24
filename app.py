@@ -27,15 +27,21 @@ def load_coral_model():
         st.error(f"Fail {MODEL_NAME} tidak dijumpai!")
         return None
     try:
-        # Kita guna 'compile=False' dan biarkan Keras 2 handle
-        # TensorFlow 2.13 secara automatik guna Keras 2, jadi isu quantization_config patut hilang
-        model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+        # TRIK TERBARU: Kita paksa load tanpa ambil peduli pasal config yang pelik-pelik
+        # Ini akan mengabaikan error 'batch_shape' dan 'optional'
+        model = tf.keras.models.load_model(MODEL_PATH, compile=False, safe_mode=False)
         return model
     except Exception as e:
-        # Jika masih error, kita bagi arahan alternatif
-        st.error(f"Ralat Versi: {e}")
-        st.info("Sila pastikan requirements.txt anda menggunakan tensorflow==2.13.0")
-        return None
+        # Jika cara di atas masih gagal, kita guna cara 'Hardcore'
+        try:
+            # Kita cuba load model sebagai model Keras 2 secara eksplisit
+            import keras
+            model = keras.models.load_model(MODEL_PATH, compile=False)
+            return model
+        except:
+            st.error(f"Ralat Versi Kronik: {e}")
+            st.info("Cadangan: Hafiz, jika masih gagal, cuba save semula model di Colab guna format '.keras' (bukan .h5) dan upload semula.")
+            return None
 
 # --- 3. UI WEB ---
 st.set_page_config(page_title="Coral Analysis AI", layout="centered")
