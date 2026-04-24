@@ -8,44 +8,37 @@ import pandas as pd
 
 # --- 1. SETTING PATH ---
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_NAME = 'model_R10.h5'
+# Pastikan nama fail ini sama dengan yang anda upload ke GitHub
+MODEL_NAME = 'model_R10.keras'
 MODEL_PATH = os.path.join(CURRENT_DIR, MODEL_NAME)
 
 CLASSES = ['ACP', 'DIPLO', 'FUN', 'MON', 'PORI']
 
-# Warna RGBA untuk Grid
+# Warna RGBA untuk visualisasi grid
 COLORS_RGBA = {
     'ACP': (255, 0, 0, 100), 'DIPLO': (0, 255, 0, 100), 
     'FUN': (0, 0, 255, 100), 'MON': (255, 255, 0, 100), 
     'PORI': (255, 0, 255, 100)
 }
 
-# --- 2. LOAD MODEL (CARA PALING SELAMAT) ---
+# --- 2. LOAD MODEL ---
 @st.cache_resource
 def load_coral_model():
     if not os.path.exists(MODEL_PATH):
-        st.error(f"Fail {MODEL_NAME} tidak dijumpai!")
+        st.error(f"⚠️ Fail '{MODEL_NAME}' tidak dijumpai di GitHub!")
         return None
     try:
-        # TRIK TERBARU: Kita paksa load tanpa ambil peduli pasal config yang pelik-pelik
-        # Ini akan mengabaikan error 'batch_shape' dan 'optional'
-        model = tf.keras.models.load_model(MODEL_PATH, compile=False, safe_mode=False)
+        # Format .keras biasanya tidak perlukan compile=False, tapi kita letak untuk keselamatan
+        model = tf.keras.models.load_model(MODEL_PATH, compile=False)
         return model
     except Exception as e:
-        # Jika cara di atas masih gagal, kita guna cara 'Hardcore'
-        try:
-            # Kita cuba load model sebagai model Keras 2 secara eksplisit
-            import keras
-            model = keras.models.load_model(MODEL_PATH, compile=False)
-            return model
-        except:
-            st.error(f"Ralat Versi Kronik: {e}")
-            st.info("Cadangan: Hafiz, jika masih gagal, cuba save semula model di Colab guna format '.keras' (bukan .h5) dan upload semula.")
-            return None
+        st.error(f"❌ Ralat muat turun model: {e}")
+        return None
 
 # --- 3. UI WEB ---
 st.set_page_config(page_title="Coral Analysis AI", layout="centered")
 st.title("🪸 Automated Coral Species Classification")
+st.markdown("Analisis Karang Terengganu menggunakan Grid Segmentation (10x5)")
 
 model = load_coral_model()
 
@@ -54,10 +47,10 @@ if model is not None:
 
     if uploaded_file is not None:
         image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, caption="Imej Input", use_container_width=True)
+        st.image(image, caption="Imej Asal", use_container_width=True)
 
-        if st.button("Jalankan Analisis Grid"):
-            with st.spinner('Sedang menganalisis 50 patches...'):
+        if st.button("Jalankan Analisis"):
+            with st.spinner('Menganalisis grid...'):
                 img_array = np.array(image)
                 h, w, _ = img_array.shape
                 rows, cols = 5, 10
@@ -78,7 +71,6 @@ if model is not None:
                         cell_norm = cell_resized / 255.0
                         cell_batch = np.expand_dims(cell_norm, axis=0)
 
-                        # Predict menggunakan model yang di-load
                         preds = model.predict(cell_batch, verbose=0)
                         idx = np.argmax(preds)
                         conf = np.max(preds)
@@ -87,22 +79,18 @@ if model is not None:
                             label = CLASSES[idx]
                             counts[label] += 1
                             draw.rectangle([x1, y1, x2, y2], fill=COLORS_RGBA[label])
-                            draw.rectangle([x1, y1, x2, y2], outline=(255,255,255,150), width=2)
                         else:
                             counts['Others'] += 1
-                            draw.rectangle([x1, y1, x2, y2], outline=(200,200,200,50), width=1)
+                            draw.rectangle([x1, y1, x2, y2], outline=(200,200,200,50))
 
-                # Papar hasil gabungan
                 final_img = Image.alpha_composite(image.convert('RGBA'), overlay).convert('RGB')
-                st.subheader("Hasil Analisis Grid (10x5)")
+                st.subheader("Hasil Analisis")
                 st.image(final_img, use_container_width=True)
                 
-                # Papar jadual statistik
+                # Statistik
                 st.divider()
-                st.subheader("📊 Statistik Liputan Karang")
-                df_stats = []
-                for sp, count in counts.items():
-                    pct = (count / 50) * 100
-                    df_stats.append({"Spesies": sp, "Bilangan Grid": count, "Peratusan (%)": f"{pct:.1f}%"})
-                
+                st.subheader("📊 Statistik Liputan")
+                df_stats = [{"Spesies": k, "Bilangan Grid": v, "Liputan (%)": f"{(v/50)*100:.1f}%"} for k,v in counts.items()]
                 st.table(pd.DataFrame(df_stats))
+
+st.caption("Developed by Hafiz Hadzrami | Marine Science AI Research")
