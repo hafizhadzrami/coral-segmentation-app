@@ -6,9 +6,12 @@ import cv2
 import os
 import pandas as pd
 
-# --- 1. CONFIGURATION ---
-# Pastikan fail model_R10.h5 diupload ke folder yang sama di GitHub
-MODEL_PATH = 'model_R10.h5'
+# --- 1. SETTING PATH & CONFIG ---
+# Paksa sistem cari path fail secara dinamik (elak isu 'file not found')
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_NAME = 'model_R10.h5'
+MODEL_PATH = os.path.join(CURRENT_DIR, MODEL_NAME)
+
 CLASSES = ['ACP', 'DIPLO', 'FUN', 'MON', 'PORI']
 
 # Warna untuk visualisasi grid (RGBA)
@@ -20,39 +23,43 @@ COLORS_RGBA = {
     'PORI': (255, 0, 255, 100)   # Magenta
 }
 
-# --- 2. FUNGSI LOAD MODEL ---
+# --- 2. FUNGSI MUAT TURUN MODEL (STABIL) ---
 @st.cache_resource
 def load_coral_model():
     if not os.path.exists(MODEL_PATH):
+        # Debugging: Papar senarai fail jika model hilang
+        files_in_dir = os.listdir(CURRENT_DIR)
+        st.error(f"Fail '{MODEL_NAME}' tidak dijumpai di server!")
+        st.write(f"Fail yang ada dalam folder: {files_in_dir}")
         return None
+    
     try:
-        # Load model tanpa compile untuk elakkan isu custom objects/optimizers
-        return tf.keras.models.load_model(MODEL_PATH, compile=False)
+        # Gunakan compile=False untuk elakkan ralat optimizers/batch_shape
+        # Ini adalah cara paling selamat untuk load model .h5 di Streamlit
+        model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+        return model
     except Exception as e:
-        st.error(f"Ralat memuatkan model: {e}")
+        st.error(f"Ralat teknikal semasa memuatkan model: {e}")
+        st.info("Punca: Versi TensorFlow di Streamlit mungkin berbeza dengan versi masa anda train model.")
         return None
 
-# --- 3. UI WEB STREAMLIT ---
-st.set_page_config(page_title="Coral Grid Segmentation", layout="centered")
+# --- 3. ANTARAMUKA (UI) ---
+st.set_page_config(page_title="Coral Analysis AI", layout="centered")
 st.title("🪸 Automated Coral Species Classification")
-st.markdown("""
-Sistem ini menggunakan arkitektur **MobileNetV2** untuk mengelaskan spesies karang secara automatik menggunakan kaedah **10x5 Grid Segmentation**.
-""")
+st.markdown("Sistem Prototaip: Klasifikasi Karang Terengganu (MobileNetV2)")
 
+# Load model secara senyap
 model = load_coral_model()
 
-if model is None:
-    st.error(f"⚠️ Fail '{MODEL_PATH}' tidak dijumpai di repository GitHub!")
-    st.info("Sila pastikan anda telah upload fail model_R10.h5 ke GitHub anda.")
-else:
-    uploaded_file = st.file_uploader("Muat naik imej karang (JPG/PNG)...", type=["jpg", "jpeg", "png"])
+if model is not None:
+    uploaded_file = st.file_uploader("Pilih imej karang (JPG/PNG)", type=["jpg", "jpeg", "png"])
 
     if uploaded_file is not None:
         image = Image.open(uploaded_file).convert("RGB")
-        st.image(image, caption="Imej Asal", use_container_width=True)
+        st.image(image, caption="Imej Input", use_container_width=True)
 
-        if st.button("Analyse & Calculate Coverage"):
-            with st.spinner('Sedang menganalisis 50 patches...'):
+        if st.button("Jalankan Analisis Grid"):
+            with st.spinner('Menganalisis data...'):
                 img_array = np.array(image)
                 h, w, _ = img_array.shape
                 rows, cols = 5, 10
@@ -61,11 +68,11 @@ else:
                 overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))
                 draw = ImageDraw.Draw(overlay)
 
-                # Dictionary untuk statistik
+                # Simpan kiraan spesies
                 species_counts = {cls: 0 for cls in CLASSES}
-                species_counts['Others/Unknown'] = 0
+                species_counts['Others'] = 0
 
-                # Proses setiap grid
+                # Loop setiap grid
                 for r in range(rows):
                     for c in range(cols):
                         y1, y2 = r * cell_h, (r + 1) * cell_h
@@ -76,45 +83,41 @@ else:
                         cell_norm = cell_resized / 255.0
                         cell_batch = np.expand_dims(cell_norm, axis=0)
 
-                        prediction = model.predict(cell_batch, verbose=0)
-                        idx = np.argmax(prediction)
-                        conf = np.max(prediction)
+                        # Predict
+                        preds = model.predict(cell_batch, verbose=0)
+                        idx = np.argmax(preds)
+                        conf = np.max(preds)
                         label = CLASSES[idx]
 
-                        # Logik Confidence Threshold (Reject noise/sand)
                         if conf > 0.5:
                             species_counts[label] += 1
                             draw.rectangle([x1, y1, x2, y2], fill=COLORS_RGBA[label])
-                            draw.rectangle([x1, y1, x2, y2], outline=(255,255,255,180), width=2)
+                            draw.rectangle([x1, y1, x2, y2], outline=(255,255,255,150), width=2)
                         else:
-                            species_counts['Others/Unknown'] += 1
+                            species_counts['Others'] += 1
                             draw.rectangle([x1, y1, x2, y2], outline=(200, 200, 200, 50), width=1)
 
-                # Papar hasil gabungan
-                result_image = Image.alpha_composite(image.convert('RGBA'), overlay)
-                st.subheader("Visual Analysis: 10x5 Grid Overlay")
-                st.image(result_image.convert('RGB'), use_container_width=True)
+                # Gabung gambar asal dengan grid
+                result_img = Image.alpha_composite(image.convert('RGBA'), overlay)
+                st.subheader("Hasil Grid Segmentation (10x5)")
+                st.image(result_img.convert('RGB'), use_container_width=True)
 
-                # --- 4. BAHAGIAN STATISTIK ---
+                # Papar statistik
                 st.divider()
-                col1, col2 = st.columns([1, 1])
-
-                total_grid = 50 
-                stats_list = []
+                st.subheader("📊 Statistik Coverage")
+                
+                df_stats = []
                 for sp, count in species_counts.items():
-                    percentage = (count / total_grid) * 100
-                    stats_list.append({"Species": sp, "Grids": count, "Percentage": f"{percentage:.1f}%"})
+                    pct = (count / 50) * 100
+                    df_stats.append({"Spesies": sp, "Bilangan Grid": count, "Peratusan (%)": f"{pct:.1f}%"})
+                
+                st.table(pd.DataFrame(df_stats))
+                
+                # Bar Chart
+                chart_data = pd.DataFrame({
+                    'Species': list(species_counts.keys()),
+                    'Grids': list(species_counts.values())
+                })
+                st.bar_chart(data=chart_data.set_index('Species'))
 
-                with col1:
-                    st.write("📊 **Coral Coverage Summary**")
-                    st.table(pd.DataFrame(stats_list))
-
-                with col2:
-                    st.write("📈 **Distribution Chart**")
-                    chart_df = pd.DataFrame({
-                        'Species': list(species_counts.keys()),
-                        'Count': list(species_counts.values())
-                    })
-                    st.bar_chart(data=chart_df.set_index('Species'))
-
-st.caption("Developed by Hafiz Hadzrami | Marine Science AI Research")
+st.caption("Developed by Hafiz Hadzrami | Master of Marine Science Research")
