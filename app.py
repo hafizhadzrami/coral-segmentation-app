@@ -24,16 +24,17 @@ COLORS_RGBA = {
 @st.cache_resource
 def load_coral_model():
     if not os.path.exists(MODEL_PATH):
-        st.error(f"Fail {MODEL_NAME} tidak dijumpai di server GitHub!")
+        st.error(f"Fail {MODEL_NAME} tidak dijumpai!")
         return None
     try:
-        # Gunakan tf.keras.models secara terus tanpa import keras berasingan
-        # compile=False sangat penting untuk bypass ralat versi optimizers
+        # Kita guna 'compile=False' dan biarkan Keras 2 handle
+        # TensorFlow 2.13 secara automatik guna Keras 2, jadi isu quantization_config patut hilang
         model = tf.keras.models.load_model(MODEL_PATH, compile=False)
         return model
     except Exception as e:
-        st.error(f"Ralat semasa memuatkan model: {e}")
-        st.info("Cuba klik 'Settings' > 'Delete Cache' dan 'Reboot' di dashboard Streamlit.")
+        # Jika masih error, kita bagi arahan alternatif
+        st.error(f"Ralat Versi: {e}")
+        st.info("Sila pastikan requirements.txt anda menggunakan tensorflow==2.13.0")
         return None
 
 # --- 3. UI WEB ---
