@@ -28,7 +28,8 @@ def load_coral_model():
     if not os.path.exists(WEIGHTS_PATH):
         return None
     try:
-        base_model = tf.keras.applications.MobileNetV2(
+        # Menukar base_model kepada EfficientNetB0 demi akurasi yang lebih tinggi
+        base_model = tf.keras.applications.EfficientNetB0(
             input_shape=(128, 128, 3), 
             include_top=False, 
             weights=None 
