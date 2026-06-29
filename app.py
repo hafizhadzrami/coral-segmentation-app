@@ -11,7 +11,7 @@ import gdown
 # --- 1. CONFIGURATION & MAPPING ---
 # Menggunakan absolute path untuk elakkan isu fail tidak dijumpai
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-WEIGHTS_NAME = 'model_R10 (2).h5' 
+WEIGHTS_NAME = 'model.h5' 
 WEIGHTS_PATH = os.path.join(CURRENT_DIR, WEIGHTS_NAME)
 
 CORAL_MAP = {
