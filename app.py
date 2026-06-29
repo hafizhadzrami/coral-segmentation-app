@@ -5,13 +5,16 @@ from PIL import Image, ImageDraw, ImageFont
 import cv2
 import os
 import pandas as pd
+import gdown
 
 # --- 1. CONFIGURATION & MAPPING ---
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-WEIGHTS_NAME = 'model_R10 (2).h5'
+WEIGHTS_NAME = 'model_R10.h5' # Nama fail yang akan disimpan dalam server
 WEIGHTS_PATH = os.path.join(CURRENT_DIR, WEIGHTS_NAME)
 
-# Full Genus Mapping
+# ID Fail Google Drive (Hafiz perlu tukar bahagian ini)
+DRIVE_ID = 'https://drive.google.com/file/d/1SZy8HAXVjSMplbAT3rRkGaUv6jtrQ4M9/view?usp=sharing'
+
 CORAL_MAP = {
     'ACP': {'name': 'Acropora', 'color': (255, 0, 0, 100), 'desc': 'Branching/Table Coral (Red)'},
     'DIPLO': {'name': 'Diploastrea', 'color': (0, 255, 0, 100), 'desc': 'Massive Coral (Green)'},
@@ -22,11 +25,19 @@ CORAL_MAP = {
 
 CLASSES = ['ACP', 'DIPLO', 'FUN', 'MON', 'PORI']
 
-# --- 2. DIRECT MODEL LOADING (SAFE HACK) ---
+# --- 2. DIRECT MODEL LOADING (SAFE HACK + GDOWN) ---
 @st.cache_resource
 def load_coral_model():
+    # Download dari Drive jika fail belum ada di server
     if not os.path.exists(WEIGHTS_PATH):
-        return None
+        with st.spinner("Downloading model from Google Drive..."):
+            try:
+                url = f'https://drive.google.com/uc?id={DRIVE_ID}'
+                gdown.download(url, WEIGHTS_PATH, quiet=False)
+            except Exception as e:
+                st.error(f"Gagal download model: {e}")
+                return None
+    
     try:
         # Trik untuk 'tipu' Keras supaya abaikan quantization_config
         class SafeDense(tf.keras.layers.Dense):
@@ -34,8 +45,7 @@ def load_coral_model():
                 kwargs.pop('quantization_config', None) # Buang punca error
                 super(SafeDense, self).__init__(**kwargs)
 
-        # Muat naik model menggunakan kelas SafeDense yang dah dibersihkan
-        # compile=False digunakan untuk buang fungsi optimizer yang tak diperlukan
+        # Muat naik model
         model = tf.keras.models.load_model(
             WEIGHTS_PATH, 
             custom_objects={'Dense': SafeDense}, 
@@ -45,7 +55,6 @@ def load_coral_model():
     except Exception as e:
         st.error(f"Model Error: {e}")
         return None
-
 # --- 3. PROFESSIONAL UI ---
 st.set_page_config(page_title="CoralVision AI", page_icon="🪸", layout="wide")
 
