@@ -1,15 +1,19 @@
 import streamlit as st
 import tensorflow as tf
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 import cv2
 import os
 import pandas as pd
+import gdown
 from tensorflow.keras.applications.efficientnet import preprocess_input
 
-# --- CONFIG ---
+# --- 1. CONFIGURATION & MAPPING ---
+# Menggunakan absolute path untuk elakkan isu fail tidak dijumpai
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-CLASSES = ['ACP', 'DIPLO', 'FUN', 'MON', 'PORI']
+WEIGHTS_NAME = 'model.h5' 
+WEIGHTS_PATH = os.path.join(CURRENT_DIR, WEIGHTS_NAME)
+
 CORAL_MAP = {
     'ACP': {'name': 'Acropora', 'color': (255, 0, 0, 100), 'desc': 'Branching/Table Coral (Red)'},
     'DIPLO': {'name': 'Diploastrea', 'color': (0, 255, 0, 100), 'desc': 'Massive Coral (Green)'},
@@ -18,63 +22,163 @@ CORAL_MAP = {
     'PORI': {'name': 'Porites', 'color': (255, 0, 255, 100), 'desc': 'Massive/Finger Coral (Magenta)'}
 }
 
-# --- MODEL LOADING ---
+CLASSES = ['ACP', 'DIPLO', 'FUN', 'MON', 'PORI']
+
+# --- 2. DIRECT MODEL LOADING (SAFE HACK) ---
 @st.cache_resource
-def load_models():
-    try:
-        # Ganti dengan nama fail model sebenar anda
-        m_eff = tf.keras.models.load_model('efficientnet_model.h5', compile=False)
-        m_res = tf.keras.models.load_model('resnet_model.h5', compile=False)
-        m_mob = tf.keras.models.load_model('mobilenet_model.h5', compile=False)
-        return m_eff, m_res, m_mob
-    except Exception as e:
-        st.error(f"Gagal memuatkan model: {e}")
-        return None, None, None
-
-# --- UI SETUP ---
-st.set_page_config(page_title="CoralVision AI", layout="wide")
-st.title("🪸 CoralVision AI: Multi-Model Comparison")
-
-model_eff, model_res, model_mob = load_models()
-
-uploaded_file = st.file_uploader("Upload Survey Image", type=["jpg", "png"])
-conf_threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.7)
-
-if uploaded_file and model_eff:
-    image = Image.open(uploaded_file).convert("RGB")
+def load_coral_model():
+    if not os.path.exists(WEIGHTS_PATH):
+        st.error(f"Fail model tidak dijumpai di: {WEIGHTS_PATH}")
+        return None
     
-    if st.button("Run Quantitative Analysis"):
-        with st.spinner('Memproses 3 model...'):
-            img_array = np.array(image)
-            h, w = img_array.shape[:2]
-            rows, cols = 5, 10
-            cell_h, cell_w = h // rows, w // cols
-            
-            overlays = {name: Image.new('RGBA', image.size, (0, 0, 0, 0)) for name in ["EfficientNet", "ResNet", "MobileNet"]}
-            draws = {name: ImageDraw.Draw(overlays[name]) for name in overlays}
-            
-            for r in range(rows):
-                for c in range(cols):
-                    # Prep patch
-                    y1, y2 = r * cell_h, (r + 1) * cell_h
-                    x1, x2 = c * cell_w, (c + 1) * cell_w
-                    cell = cv2.resize(img_array[y1:y2, x1:x2], (128, 128)).astype(np.float32)
-                    cell = np.expand_dims(preprocess_input(cell), axis=0)
-                    
-                    # Inference
-                    preds_list = [model_eff.predict(cell, verbose=0), 
-                                  model_res.predict(cell, verbose=0), 
-                                  model_mob.predict(cell, verbose=0)]
-                    
-                    for name, preds in zip(overlays.keys(), preds_list):
-                        idx = np.argmax(preds)
-                        if np.max(preds) >= conf_threshold:
-                            label = CLASSES[idx]
-                            draws[name].rectangle([x1, y1, x2, y2], fill=CORAL_MAP[label]['color'], outline="white")
+    try:
+        # Kelas pembantu untuk mengabaikan quantization_config (punca error Keras 3)
+        class SafeDense(tf.keras.layers.Dense):
+            def __init__(self, **kwargs):
+                kwargs.pop('quantization_config', None)
+                super(SafeDense, self).__init__(**kwargs)
 
-            # Display Results
-            cols_ui = st.columns(3)
-            results = []
-            for i, name in enumerate(overlays.keys()):
-                res_img = Image.alpha_composite(image.convert('RGBA'), overlays[name]).convert('RGB')
-                cols_ui[i].image(res_img, caption=f"{name} Result", use_container_width=True)
+        # Memuat naik model
+        model = tf.keras.models.load_model(
+            WEIGHTS_PATH, 
+            custom_objects={'Dense': SafeDense}, 
+            compile=False
+        )
+        return model
+    except Exception as e:
+        st.error(f"Model Error: {e}")
+        return None
+
+# --- 3. STREAMLIT UI STARTUP ---
+model = load_coral_model()
+
+if model is not None:
+    st.title("Coral Classification App")
+    st.write("Model dimuatkan dengan berjaya!")
+    # Sambungkan dengan logik pemprosesan imej anda di sini...
+else:
+    st.warning("Sila pastikan fail model dimuat naik dengan betul ke dalam repository.")
+        
+# --- 3. PROFESSIONAL UI ---
+st.set_page_config(page_title="CoralVision AI", page_icon="🪸", layout="wide")
+
+# Custom CSS for Professional Theme
+st.markdown("""
+    <style>
+    .main { background-color: #fcfcfc; }
+    .stButton>button { width: 100%; border-radius: 8px; height: 3.5em; background-color: #1E3A8A; color: white; font-weight: bold; }
+    h1 { color: #1E3A8A; }
+    .stAlert { border-radius: 10px; }
+    </style>
+    """, unsafe_allow_html=True)
+
+st.title("🪸 CoralVision AI: Automated Ecological Analysis")
+st.markdown("#### Marine Science Research | Quantitative Benthic Cover Estimation")
+st.divider()
+
+# Sidebar for Settings and Legend
+with st.sidebar:
+    st.header("⚙️ Analysis Settings")
+    conf_threshold = st.slider(
+        "Confidence Threshold", 
+        0.0, 1.0, 0.7, 0.05,
+        help="Higher threshold means stricter classification. Only high-confidence predictions will be labeled."
+    )
+    
+    st.divider()
+    st.header("🔍 Genus Legend")
+    for code, info in CORAL_MAP.items():
+        st.markdown(f"**{info['name']}**")
+        st.caption(info['desc'])
+    
+    st.divider()
+    st.header("📝 Research Notes")
+    st.warning("""
+        **Data Quality Assurance:**
+        Classification accuracy is highly dependent on image resolution. 
+        
+        Since the system crops the image into 50 patches, **low-pixel density** images will cause 'pixelation' in the patches, leading to misclassification. 
+        
+        *Recommended: 1920x1080px minimum.*
+    """)
+
+model = load_coral_model()
+
+if model is None:
+    st.error(f"Critical Error: Weights file '{WEIGHTS_NAME}' missing.")
+else:
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        uploaded_file = st.file_uploader("Upload Survey Image (JPG/PNG)", type=["jpg", "jpeg", "png"])
+        if uploaded_file:
+            image = Image.open(uploaded_file).convert("RGB")
+            st.image(image, caption="Original Survey Image", use_container_width=True)
+
+    if uploaded_file is not None:
+        with col2:
+            if st.button("Run Quantitative Analysis"):
+                with st.spinner('Neural Network is processing patches...'):
+                    img_array = np.array(image)
+                    h, w, _ = img_array.shape
+                    rows, cols = 5, 10
+                    cell_h, cell_w = h // rows, w // cols
+
+                    overlay = Image.new('RGBA', image.size, (0, 0, 0, 0))
+                    draw = ImageDraw.Draw(overlay)
+                    
+                    counts = {cls: 0 for cls in CLASSES}
+                    counts['Uncertain/Others'] = 0
+
+                    for r in range(rows):
+                        for c in range(cols):
+                            y1, y2 = r * cell_h, (r + 1) * cell_h
+                            x1, x2 = c * cell_w, (c + 1) * cell_w
+                            cell = cv2.resize(img_array[y1:y2, x1:x2], (128, 128)) 
+
+                            cell = cell.astype(np.float32)
+
+                            cell = preprocess_input(cell)
+
+                            cell = np.expand_dims(cell, axis=0)
+                            
+                            preds = model.predict(cell, verbose=0)
+                            idx = np.argmax(preds)
+                            conf = np.max(preds)
+                            
+                            if conf >= conf_threshold:
+                                label_code = CLASSES[idx]
+                                genus_name = CORAL_MAP[label_code]['name']
+                                counts[label_code] += 1
+                                draw.rectangle([x1, y1, x2, y2], fill=CORAL_MAP[label_code]['color'], outline=(255,255,255,180), width=2)
+                                draw.text((x1 + 5, y1 + 5), genus_name, fill=(255,255,255,255))
+                            else:
+                                counts['Uncertain/Others'] += 1
+                                draw.rectangle([x1, y1, x2, y2], outline=(200, 200, 200, 80), width=1)
+
+                    result_img = Image.alpha_composite(image.convert('RGBA'), overlay).convert('RGB')
+                    st.image(result_img, caption=f"Analysis Result (Threshold: {conf_threshold})", use_container_width=True)
+
+        if 'result_img' in locals():
+            st.divider()
+            res_col1, res_col2 = st.columns([1, 1])
+            
+            with res_col1:
+                st.subheader("📊 Quantitative Results")
+                stats_data = []
+                for sp, count in counts.items():
+                    name = CORAL_MAP[sp]['name'] if sp in CORAL_MAP else sp
+                    pct = (count / 50) * 100
+                    stats_data.append({"Coral Genus": name, "Grid Count": count, "Benthic Cover (%)": f"{pct:.1f}%"})
+                st.table(pd.DataFrame(stats_data))
+
+            with res_col2:
+                st.subheader("📈 Genus Distribution")
+                chart_df = pd.DataFrame({
+                    'Genus': [CORAL_MAP[k]['name'] if k in CORAL_MAP else k for k in counts.keys()],
+                    'Count': list(counts.values())
+                })
+                st.bar_chart(data=chart_df.set_index('Genus'))
+
+st.markdown("---")
+st.caption("Marine Science Research | Automated Monitoring Pipeline | Hafiz Hadzrami")
