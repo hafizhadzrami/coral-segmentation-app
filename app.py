@@ -13,7 +13,7 @@ WEIGHTS_NAME = 'model_R10.h5' # Nama fail yang akan disimpan dalam server
 WEIGHTS_PATH = os.path.join(CURRENT_DIR, WEIGHTS_NAME)
 
 # ID Fail Google Drive (Hafiz perlu tukar bahagian ini)
-DRIVE_ID = https://drive.google.com/file/d/1SZy8HAXVjSMplbAT3rRkGaUv6jtrQ4M9/view?usp=sharing
+DRIVE_ID = 'https://drive.google.com/file/d/1SZy8HAXVjSMplbAT3rRkGaUv6jtrQ4M9/view?usp=sharing'
 
 CORAL_MAP = {
     'ACP': {'name': 'Acropora', 'color': (255, 0, 0, 100), 'desc': 'Branching/Table Coral (Red)'},
