@@ -8,7 +8,7 @@ import pandas as pd
 
 # --- 1. CONFIGURATION & MAPPING ---
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-WEIGHTS_NAME = 'model_weights.h5'
+WEIGHTS_NAME = 'model_R10 (2).h5'
 WEIGHTS_PATH = os.path.join(CURRENT_DIR, WEIGHTS_NAME)
 
 # Full Genus Mapping
