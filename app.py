@@ -6,7 +6,7 @@ import cv2
 import os
 import pandas as pd
 import gdown
-
+from tensorflow.keras.applications.efficientnet import preprocess_input
 
 # --- 1. CONFIGURATION & MAPPING ---
 # Menggunakan absolute path untuk elakkan isu fail tidak dijumpai
@@ -135,8 +135,14 @@ else:
                             y1, y2 = r * cell_h, (r + 1) * cell_h
                             x1, x2 = c * cell_w, (c + 1) * cell_w
                             cell = cv2.resize(img_array[y1:y2, x1:x2], (128, 128)) / 255.0
+
+                            cell = cell.astype(np.float32)
+
+                            cell = preprocess_input(cell)
+
+                            cell = np.expand_dims(cell, axis=0)
                             
-                            preds = model.predict(np.expand_dims(cell, axis=0), verbose=0)
+                            preds = model.predict(cell, verbose=0)
                             idx = np.argmax(preds)
                             conf = np.max(preds)
                             
