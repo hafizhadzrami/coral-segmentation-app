@@ -7,13 +7,12 @@ import os
 import pandas as pd
 import gdown
 
-# --- 1. CONFIGURATION & MAPPING ---
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-WEIGHTS_NAME = 'model_R10.h5' # Nama fail yang akan disimpan dalam server
-WEIGHTS_PATH = os.path.join(CURRENT_DIR, WEIGHTS_NAME)
 
-# ID Fail Google Drive (Hafiz perlu tukar bahagian ini)
-DRIVE_ID = '1SZy8HAXVjSMplbAT3rRkGaUv6jtrQ4M9'
+# --- 1. CONFIGURATION & MAPPING ---
+# Menggunakan absolute path untuk elakkan isu fail tidak dijumpai
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+WEIGHTS_NAME = 'model_R10 (2).h5' 
+WEIGHTS_PATH = os.path.join(CURRENT_DIR, WEIGHTS_NAME)
 
 CORAL_MAP = {
     'ACP': {'name': 'Acropora', 'color': (255, 0, 0, 100), 'desc': 'Branching/Table Coral (Red)'},
@@ -25,35 +24,23 @@ CORAL_MAP = {
 
 CLASSES = ['ACP', 'DIPLO', 'FUN', 'MON', 'PORI']
 
-# --- 2. DIRECT MODEL LOADING (SAFE HACK + GDOWN) ---
+# --- 2. DIRECT MODEL LOADING (SAFE HACK) ---
 @st.cache_resource
 def load_coral_model():
-    # Nama fail bahagian yang anda upload ke GitHub
-    part1 = 'model_R10.h5.part1'
-    part2 = 'model_R10.h5.part2'
-    # Nama fail output yang akan dibina semula
-    full_model = 'model_R10_final.h5'
+    if not os.path.exists(WEIGHTS_PATH):
+        st.error(f"Fail model tidak dijumpai di: {WEIGHTS_PATH}")
+        return None
     
-    # 1. Cantumkan semula jika fail penuh belum wujud
-    if not os.path.exists(full_model):
-        try:
-            with open(full_model, 'wb') as outfile:
-                for part in [part1, part2]:
-                    with open(part, 'rb') as infile:
-                        outfile.write(infile.read())
-        except Exception as e:
-            st.error(f"Gagal mencantumkan fail: {e}")
-            return None
-    
-    # 2. Load model dengan Trik SafeDense (elak ralat quantization_config)
     try:
+        # Kelas pembantu untuk mengabaikan quantization_config (punca error Keras 3)
         class SafeDense(tf.keras.layers.Dense):
             def __init__(self, **kwargs):
                 kwargs.pop('quantization_config', None)
                 super(SafeDense, self).__init__(**kwargs)
 
+        # Memuat naik model
         model = tf.keras.models.load_model(
-            full_model, 
+            WEIGHTS_PATH, 
             custom_objects={'Dense': SafeDense}, 
             compile=False
         )
@@ -61,6 +48,16 @@ def load_coral_model():
     except Exception as e:
         st.error(f"Model Error: {e}")
         return None
+
+# --- 3. STREAMLIT UI STARTUP ---
+model = load_coral_model()
+
+if model is not None:
+    st.title("Coral Classification App")
+    st.write("Model dimuatkan dengan berjaya!")
+    # Sambungkan dengan logik pemprosesan imej anda di sini...
+else:
+    st.warning("Sila pastikan fail model dimuat naik dengan betul ke dalam repository.")
         
 # --- 3. PROFESSIONAL UI ---
 st.set_page_config(page_title="CoralVision AI", page_icon="🪸", layout="wide")
