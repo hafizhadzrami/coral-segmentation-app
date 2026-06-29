@@ -28,24 +28,27 @@ CLASSES = ['ACP', 'DIPLO', 'FUN', 'MON', 'PORI']
 # --- 2. DIRECT MODEL LOADING (SAFE HACK + GDOWN) ---
 @st.cache_resource
 def load_coral_model():
-    # Download dari Drive jika fail belum ada di server
     if not os.path.exists(WEIGHTS_PATH):
-        with st.spinner("Downloading model from Google Drive..."):
+        with st.spinner("Downloading model..."):
             try:
-                url = f'https://drive.google.com/uc?id={DRIVE_ID}'
-                gdown.download(url, WEIGHTS_PATH, quiet=False)
+                # Guna link download terus untuk bypass scan virus
+                url = f'https://drive.google.com/uc?export=download&id=1SZy8HAXVjSMplbAT3rRkGaUv6jtrQ4M9'
+                gdown.download(url, WEIGHTS_PATH, quiet=False, fuzzy=True)
             except Exception as e:
-                st.error(f"Gagal download model: {e}")
+                st.error(f"Gagal download: {e}")
                 return None
     
+    # Check semula selepas download
+    if not os.path.exists(WEIGHTS_PATH):
+        st.error("Fail masih tidak dijumpai selepas download.")
+        return None
+        
     try:
-        # Trik untuk 'tipu' Keras supaya abaikan quantization_config
         class SafeDense(tf.keras.layers.Dense):
             def __init__(self, **kwargs):
-                kwargs.pop('quantization_config', None) # Buang punca error
+                kwargs.pop('quantization_config', None)
                 super(SafeDense, self).__init__(**kwargs)
 
-        # Muat naik model
         model = tf.keras.models.load_model(
             WEIGHTS_PATH, 
             custom_objects={'Dense': SafeDense}, 
@@ -55,6 +58,7 @@ def load_coral_model():
     except Exception as e:
         st.error(f"Model Error: {e}")
         return None
+        
 # --- 3. PROFESSIONAL UI ---
 st.set_page_config(page_title="CoralVision AI", page_icon="🪸", layout="wide")
 
