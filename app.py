@@ -5,15 +5,13 @@ from PIL import Image, ImageDraw, ImageFont
 import cv2
 import os
 import pandas as pd
-import gdown
-
 
 # --- 1. CONFIGURATION & MAPPING ---
-# Menggunakan absolute path untuk elakkan isu fail tidak dijumpai
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-WEIGHTS_NAME = 'model_R10 (2).h5' 
+WEIGHTS_NAME = 'model_weights.weights.h5'
 WEIGHTS_PATH = os.path.join(CURRENT_DIR, WEIGHTS_NAME)
 
+# Full Genus Mapping
 CORAL_MAP = {
     'ACP': {'name': 'Acropora', 'color': (255, 0, 0, 100), 'desc': 'Branching/Table Coral (Red)'},
     'DIPLO': {'name': 'Diploastrea', 'color': (0, 255, 0, 100), 'desc': 'Massive Coral (Green)'},
@@ -24,41 +22,31 @@ CORAL_MAP = {
 
 CLASSES = ['ACP', 'DIPLO', 'FUN', 'MON', 'PORI']
 
-# --- 2. DIRECT MODEL LOADING (SAFE HACK) ---
+# --- 2. MODEL RECONSTRUCTION ---
 @st.cache_resource
 def load_coral_model():
     if not os.path.exists(WEIGHTS_PATH):
-        st.error(f"Fail model tidak dijumpai di: {WEIGHTS_PATH}")
         return None
-    
     try:
-        # Kelas pembantu untuk mengabaikan quantization_config (punca error Keras 3)
-        class SafeDense(tf.keras.layers.Dense):
-            def __init__(self, **kwargs):
-                kwargs.pop('quantization_config', None)
-                super(SafeDense, self).__init__(**kwargs)
-
-        # Memuat naik model
-        model = tf.keras.models.load_model(
-            WEIGHTS_PATH, 
-            custom_objects={'Dense': SafeDense}, 
-            compile=False
+        base_model = tf.keras.applications.MobileNetV2(
+            input_shape=(128, 128, 3), 
+            include_top=False, 
+            weights=None 
         )
+        model = tf.keras.Sequential([
+            base_model,
+            tf.keras.layers.GlobalAveragePooling2D(),
+            tf.keras.layers.BatchNormalization(),
+            tf.keras.layers.Dense(256, activation='relu'),
+            tf.keras.layers.Dropout(0.5),
+            tf.keras.layers.Dense(5, activation='softmax')
+        ])
+        model.load_weights(WEIGHTS_PATH)
         return model
     except Exception as e:
         st.error(f"Model Error: {e}")
         return None
 
-# --- 3. STREAMLIT UI STARTUP ---
-model = load_coral_model()
-
-if model is not None:
-    st.title("Coral Classification App")
-    st.write("Model dimuatkan dengan berjaya!")
-    # Sambungkan dengan logik pemprosesan imej anda di sini...
-else:
-    st.warning("Sila pastikan fail model dimuat naik dengan betul ke dalam repository.")
-        
 # --- 3. PROFESSIONAL UI ---
 st.set_page_config(page_title="CoralVision AI", page_icon="🪸", layout="wide")
 
