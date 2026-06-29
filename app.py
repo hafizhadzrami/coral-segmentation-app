@@ -22,27 +22,15 @@ CORAL_MAP = {
 
 CLASSES = ['ACP', 'DIPLO', 'FUN', 'MON', 'PORI']
 
-# --- 2. MODEL RECONSTRUCTION ---
+# --- 2. DIRECT MODEL LOADING (ANTI-SHAPE MISMATCH) ---
 @st.cache_resource
 def load_coral_model():
     if not os.path.exists(WEIGHTS_PATH):
         return None
     try:
-        # Menukar base_model kepada EfficientNetB0 demi akurasi yang lebih tinggi
-        base_model = tf.keras.applications.EfficientNetB0(
-            input_shape=(128, 128, 3), 
-            include_top=False, 
-            weights=None 
-        )
-        model = tf.keras.Sequential([
-            base_model,
-            tf.keras.layers.GlobalAveragePooling2D(),
-            tf.keras.layers.BatchNormalization(),
-            tf.keras.layers.Dense(256, activation='relu'),
-            tf.keras.layers.Dropout(0.5),
-            tf.keras.layers.Dense(5, activation='softmax')
-        ])
-        model.load_weights(WEIGHTS_PATH)
+        # Keras akan load keseluruhan struktur + weights + input shape 
+        # yang tepat dari Colab secara automatik tanpa ralat "axes don't match"
+        model = tf.keras.models.load_model(WEIGHTS_PATH)
         return model
     except Exception as e:
         st.error(f"Model Error: {e}")
