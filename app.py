@@ -28,21 +28,24 @@ CLASSES = ['ACP', 'DIPLO', 'FUN', 'MON', 'PORI']
 # --- 2. DIRECT MODEL LOADING (SAFE HACK + GDOWN) ---
 @st.cache_resource
 def load_coral_model():
-    if not os.path.exists(WEIGHTS_PATH):
-        with st.spinner("Downloading model..."):
-            try:
-                # Guna link download terus untuk bypass scan virus
-                url = f'https://drive.google.com/uc?export=download&id=1SZy8HAXVjSMplbAT3rRkGaUv6jtrQ4M9'
-                gdown.download(url, WEIGHTS_PATH, quiet=False, fuzzy=True)
-            except Exception as e:
-                st.error(f"Gagal download: {e}")
-                return None
+    # Nama fail bahagian yang anda upload ke GitHub
+    part1 = 'model_R10.h5.part1'
+    part2 = 'model_R10.h5.part2'
+    # Nama fail output yang akan dibina semula
+    full_model = 'model_R10_final.h5'
     
-    # Check semula selepas download
-    if not os.path.exists(WEIGHTS_PATH):
-        st.error("Fail masih tidak dijumpai selepas download.")
-        return None
-        
+    # 1. Cantumkan semula jika fail penuh belum wujud
+    if not os.path.exists(full_model):
+        try:
+            with open(full_model, 'wb') as outfile:
+                for part in [part1, part2]:
+                    with open(part, 'rb') as infile:
+                        outfile.write(infile.read())
+        except Exception as e:
+            st.error(f"Gagal mencantumkan fail: {e}")
+            return None
+    
+    # 2. Load model dengan Trik SafeDense (elak ralat quantization_config)
     try:
         class SafeDense(tf.keras.layers.Dense):
             def __init__(self, **kwargs):
@@ -50,7 +53,7 @@ def load_coral_model():
                 super(SafeDense, self).__init__(**kwargs)
 
         model = tf.keras.models.load_model(
-            WEIGHTS_PATH, 
+            full_model, 
             custom_objects={'Dense': SafeDense}, 
             compile=False
         )
