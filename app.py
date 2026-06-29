@@ -22,15 +22,25 @@ CORAL_MAP = {
 
 CLASSES = ['ACP', 'DIPLO', 'FUN', 'MON', 'PORI']
 
-# --- 2. DIRECT MODEL LOADING (ANTI-SHAPE MISMATCH) ---
+# --- 2. DIRECT MODEL LOADING (SAFE HACK) ---
 @st.cache_resource
 def load_coral_model():
     if not os.path.exists(WEIGHTS_PATH):
         return None
     try:
-        # Keras akan load keseluruhan struktur + weights + input shape 
-        # yang tepat dari Colab secara automatik tanpa ralat "axes don't match"
-        model = tf.keras.models.load_model(WEIGHTS_PATH)
+        # Trik untuk 'tipu' Keras supaya abaikan quantization_config
+        class SafeDense(tf.keras.layers.Dense):
+            def __init__(self, **kwargs):
+                kwargs.pop('quantization_config', None) # Buang punca error
+                super(SafeDense, self).__init__(**kwargs)
+
+        # Muat naik model menggunakan kelas SafeDense yang dah dibersihkan
+        # compile=False digunakan untuk buang fungsi optimizer yang tak diperlukan
+        model = tf.keras.models.load_model(
+            WEIGHTS_PATH, 
+            custom_objects={'Dense': SafeDense}, 
+            compile=False
+        )
         return model
     except Exception as e:
         st.error(f"Model Error: {e}")
