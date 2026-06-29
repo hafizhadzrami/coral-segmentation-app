@@ -4,4 +4,3 @@ keras>=3.0.0
 opencv-python-headless
 pillow
 pandas
-gdown
