@@ -134,7 +134,7 @@ else:
                         for c in range(cols):
                             y1, y2 = r * cell_h, (r + 1) * cell_h
                             x1, x2 = c * cell_w, (c + 1) * cell_w
-                            cell = cv2.resize(img_array[y1:y2, x1:x2], (128, 128)) / 255.0
+                            cell = cv2.resize(img_array[y1:y2, x1:x2], (128, 128)) 
 
                             cell = cell.astype(np.float32)
 
